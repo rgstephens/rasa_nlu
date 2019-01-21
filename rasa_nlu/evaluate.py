@@ -682,33 +682,43 @@ def run_tt_evaluation(data, nlu_config, train_pct, cutoff,
     data_train, data_test = data.train_test_split(train_pct)
     data_train = drop_intents_below_freq(data_train, cutoff)
 
-    # setup for training
-    nlu_config = config.load(nlu_config)
-    trainer = Trainer(nlu_config)
-    interpreter = trainer.train(data_train)
-    # run evaluation
-    extractors = get_entity_extractors(interpreter)
-    entity_predictions, tokens = get_entity_predictions(interpreter, data_test)
+    # split nlu_config in case of multiple runs
+    nlu_config_array = [c.strip() for c in nlu_config.split(',')]
+    for i, nlu_config in enumerate(nlu_config_array):
+        # setup for training
+        nlu_config = config.load(nlu_config)
+        trainer = Trainer(nlu_config)
+        interpreter = trainer.train(data_train)
+        # run evaluation
+        extractors = get_entity_extractors(interpreter)
+        entity_predictions, tokens = get_entity_predictions(interpreter, data_test)
 
-    if duckling_extractors.intersection(extractors):
-        entity_predictions = remove_duckling_entities(entity_predictions)
-        extractors = remove_duckling_extractors(extractors)
+        if duckling_extractors.intersection(extractors):
+            entity_predictions = remove_duckling_entities(entity_predictions)
+            extractors = remove_duckling_extractors(extractors)
 
-    if is_intent_classifier_present(interpreter):
-        intent_targets = get_intent_targets(data_test)
-        intent_results = get_intent_predictions(
-                intent_targets, interpreter, data_test)
-        logger.info("Intent evaluation results:")
+        if is_intent_classifier_present(interpreter):
+            intent_targets = get_intent_targets(data_test)
+            intent_results = get_intent_predictions(
+                    intent_targets, interpreter, data_test)
+            logger.info("Intent evaluation results:")
 
-        evaluate_intents(intent_results, errors_filename, confmat_filename,
-                         intent_hist_filename)
+            # append number to filename
+            e = errors_filename.split(".")
+            errors_filename_num = "%s-%s.%s" % (e[0], i, e[1])
+            c = confmat_filename.split(".")
+            confmat_filename_num = "%s-%s.%s" % (c[0], i, c[1])
+            h = intent_hist_filename.split(".")
+            intent_hist_filename_num = "%s-%s.%s" % (h[0], i, h[1])
+            evaluate_intents(intent_results, errors_filename_num,
+                             confmat_filename_num, intent_hist_filename_num)
 
-    if extractors:
-        entity_targets = get_entity_targets(data_test)
+        if extractors:
+            entity_targets = get_entity_targets(data_test)
 
-        logger.info("Entity evaluation results:")
-        evaluate_entities(entity_targets, entity_predictions, tokens,
-                          extractors)
+            logger.info("Entity evaluation results:")
+            evaluate_entities(entity_targets, entity_predictions, tokens,
+                              extractors)
 
 
 def run_evaluation(data_path, model,
